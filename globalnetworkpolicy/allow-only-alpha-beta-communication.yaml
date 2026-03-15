@@ -1,0 +1,71 @@
+############################################
+# NetworkPolicy to allow traffic only between ns-alpha, ns-beta, and ns-gamma pods.
+# This policy allows ingress/egress only when the peer pod is in ns-alpha, ns-beta, or ns-gamma.
+# Traffic to/from all other namespaces is denied by default for selected pods.
+############################################
+
+apiVersion: crd.projectcalico.org/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-alpha-beta-gamma-only
+  namespace: ns-alpha
+spec:
+  selector: all()
+  order: 210
+  types:
+    - Ingress
+    - Egress
+  ingress:
+    - action: Allow
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-alpha' || kubernetes.io/metadata.name == 'ns-beta' || kubernetes.io/metadata.name == 'ns-gamma'
+        selector: all()
+  egress:
+    - action: Allow
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-alpha' || kubernetes.io/metadata.name == 'ns-beta' || kubernetes.io/metadata.name == 'ns-gamma'
+        selector: all()
+---
+apiVersion: crd.projectcalico.org/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-alpha-beta-gamma-only
+  namespace: ns-beta
+spec:
+  selector: all()
+  order: 210
+  types:
+    - Ingress
+    - Egress
+  ingress:
+    - action: Allow
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-alpha' || kubernetes.io/metadata.name == 'ns-beta' || kubernetes.io/metadata.name == 'ns-gamma'
+        selector: all()
+  egress:
+    - action: Allow
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-alpha' || kubernetes.io/metadata.name == 'ns-beta' || kubernetes.io/metadata.name == 'ns-gamma'
+        selector: all()
+---
+apiVersion: crd.projectcalico.org/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-alpha-beta-gamma-only
+  namespace: ns-gamma
+spec:
+  selector: all()
+  order: 210
+  types:
+    - Ingress
+    - Egress
+  ingress:
+    - action: Allow
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-alpha' || kubernetes.io/metadata.name == 'ns-beta' || kubernetes.io/metadata.name == 'ns-gamma'
+        selector: all()
+  egress:
+    - action: Allow
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-alpha' || kubernetes.io/metadata.name == 'ns-beta' || kubernetes.io/metadata.name == 'ns-gamma'
+        selector: all()
