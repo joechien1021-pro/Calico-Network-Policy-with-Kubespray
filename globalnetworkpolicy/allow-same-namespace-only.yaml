@@ -1,0 +1,23 @@
+############################################
+# NetworkPolicy: allow-same-namespace-only.yaml
+# Description: Allows all ingress and egress traffic within the same namespace only.
+# Applied to namespaces: ns-alpha, ns-beta
+############################################
+apiVersion: crd.projectcalico.org/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace-only
+  namespace: ns-alpha
+spec:
+  selector: all()
+  types:
+    - Ingress
+    - Egress
+  ingress:
+    - action: Allow
+      source:
+        selector: all()
+  egress:
+    - action: Allow
+      destination:
+        selector: all()

@@ -1,0 +1,147 @@
+#############################################
+# Calico Tiered Zero Trust Network Policies
+# This set of policies implements a zero-trust model
+# with specific allowances for DNS and Kubernetes API access,
+# and restricts pod communication to within the same namespace only.
+# File: calico-tiered-zero-trust.yaml
+#############################################
+
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: allow-dns-egress
+spec:
+  order: 100
+  selector: all()
+  types:
+    - Egress
+  egress:
+    - action: Allow
+      protocol: UDP
+      destination:
+        nets:
+          - 169.254.25.10/32
+          - 10.233.0.3/32
+        ports:
+          - 53
+    - action: Allow
+      protocol: TCP
+      destination:
+        nets:
+          - 169.254.25.10/32
+          - 10.233.0.3/32
+        ports:
+          - 53
+    - action: Allow
+      protocol: UDP
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == 'kube-system'
+        selector: k8s-app == 'kube-dns' || k8s-app == 'node-local-dns'
+        ports:
+          - 53
+    - action: Allow
+      protocol: TCP
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == 'kube-system'
+        selector: k8s-app == 'kube-dns' || k8s-app == 'node-local-dns'
+        ports:
+          - 53
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: allow-kube-api-egress
+spec:
+  order: 110
+  selector: all()
+  types:
+    - Egress
+  egress:
+    - action: Allow
+      protocol: TCP
+      destination:
+        nets:
+          - 10.233.0.1/32
+        ports:
+          - 6443
+---
+apiVersion: crd.projectcalico.org/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace-only
+  namespace: ns-alpha
+spec:
+  order: 200
+  selector: all()
+  types:
+    - Ingress
+    - Egress
+  ingress:
+    - action: Allow
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-alpha'
+        selector: all()
+  egress:
+    - action: Allow
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-alpha'
+        selector: all()
+---
+apiVersion: crd.projectcalico.org/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace-only
+  namespace: ns-beta
+spec:
+  order: 200
+  selector: all()
+  types:
+    - Ingress
+    - Egress
+  ingress:
+    - action: Allow
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-beta'
+        selector: all()
+  egress:
+    - action: Allow
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-beta'
+        selector: all()
+---
+apiVersion: crd.projectcalico.org/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace-only
+  namespace: ns-gamma
+spec:
+  order: 200
+  selector: all()
+  types:
+    - Ingress
+    - Egress
+  ingress:
+    - action: Allow
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-gamma'
+        selector: all()
+  egress:
+    - action: Allow
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-gamma'
+        selector: all()
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: global-default-deny
+spec:
+  order: 1000
+  selector: all()
+  types:
+    - Ingress
+    - Egress
+  ingress:
+    - action: Deny
+  egress:
+    - action: Deny

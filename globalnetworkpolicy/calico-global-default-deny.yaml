@@ -1,0 +1,21 @@
+#################################################
+# Calico Global Network Policy - Deny All
+# This policy denies all ingress and egress traffic
+# across the entire cluster.
+# File: calico-global-default-deny.yaml
+#################################################
+
+apiVersion: crd.projectcalico.org/v1 # Calico CRD API version available in this cluster.
+kind: GlobalNetworkPolicy # Resource type for cluster-wide Calico policy - not just one namespace.
+metadata:
+  name: global-default-deny
+spec:
+  selector: all()
+  types:
+    - Ingress
+    - Egress
+  ingress:
+    - action: Deny
+  egress:
+    - action: Deny
+  # calicoctl apply -f calico-global-default-deny.yaml
