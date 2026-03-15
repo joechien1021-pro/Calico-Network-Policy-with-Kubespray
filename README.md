@@ -1,1 +1,1 @@
-# Calico-Network-Policy-with-Kubespray
+# Calico-Global-Network-Policy-template
