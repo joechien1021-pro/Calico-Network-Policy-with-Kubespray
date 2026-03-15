@@ -8,7 +8,7 @@ A reference implementation of Calico `GlobalNetworkPolicy` zero-trust network se
 
 This repository provides:
 
-- **GlobalNetworkPolicy templates** — ready-to-apply Calico policy YAMLs covering allow-all, deny-all, same-namespace-only, and a full tiered zero-trust stack.
+- **GlobalNetworkPolicy templates** — ready-to-apply Calico policy YAMLs covering allow-all, deny-all, alpha/beta/gamma-communication-only, and a full tiered zero-trust stack.
 - **Kubespray installer** — a single-host bash script that provisions a Kubernetes cluster (control-plane + worker) with Calico as the CNI.
 - **Minikube helper** — installs Calico CRDs into a Minikube cluster for local policy testing without a full Calico deployment.
 - **Test suite** — scripts to deploy test pods across multiple namespaces and validate that zero-trust policies are correctly enforced.
@@ -20,7 +20,7 @@ This repository provides:
 ```
 .
 ├── globalnetworkpolicy/
-│   ├── allow-same-namespace-only.yaml    # Namespace-scoped: allow intra-namespace traffic only
+│   ├── allow-only-alpha-beta-communication.yaml  # Namespace-scoped: allow traffic only among ns-alpha/ns-beta/ns-gamma
 │   ├── calico-global-default-allow.yaml  # GlobalNetworkPolicy: allow all ingress + egress
 │   ├── calico-global-default-deny.yaml   # GlobalNetworkPolicy: deny all ingress + egress
 │   └── calico-tiered-zero-trust.yaml     # Full zero-trust stack (DNS, kube-api, namespace isolation, default deny)
@@ -104,12 +104,12 @@ Denies all ingress and egress traffic cluster-wide. Apply as the base of a zero-
 kubectl apply -f globalnetworkpolicy/calico-global-default-deny.yaml
 ```
 
-### 3. Same-Namespace Only (`allow-same-namespace-only.yaml`)
+### 3. Alpha/Beta/Gamma Only (`allow-only-alpha-beta-communication.yaml`)
 
-Restricts pods to communicating only within their own namespace (`ns-alpha`, `ns-beta`).
+Restricts selected pods to communicating only with peers in `ns-alpha`, `ns-beta`, or `ns-gamma`.
 
 ```bash
-kubectl apply -f globalnetworkpolicy/allow-same-namespace-only.yaml
+kubectl apply -f globalnetworkpolicy/allow-only-alpha-beta-communication.yaml
 ```
 
 ### 4. Tiered Zero-Trust Stack (`calico-tiered-zero-trust.yaml`)
@@ -120,7 +120,7 @@ A complete zero-trust policy set applied in priority order:
 |---|---|---|
 | 100 | `allow-dns-egress` | Allow DNS (UDP/TCP 53) to node-local-dns and kube-dns |
 | 110 | `allow-kube-api-egress` | Allow egress to the Kubernetes API server (`10.233.0.1:6443`) |
-| 200 | `allow-same-namespace-only` | Allow intra-namespace traffic for `ns-alpha`, `ns-beta`, `ns-gamma` |
+| 200 | `allow-same-namespace-only` | Allow traffic among `ns-alpha`, `ns-beta`, `ns-gamma` |
 | 1000 | `global-default-deny` | Deny all remaining ingress and egress traffic |
 
 ```bash
@@ -178,11 +178,11 @@ Pod (any namespace)
   │
   ├── Egress order 100 ──► Allow DNS (kube-dns / node-local-dns)
   ├── Egress order 110 ──► Allow Kubernetes API server
-  ├── Ingress/Egress order 200 ──► Allow same-namespace peers only
+  ├── Ingress/Egress order 200 ──► Allow peers in ns-alpha/ns-beta/ns-gamma only
   └── Ingress/Egress order 1000 ──► Deny everything else
 ```
 
-Cross-namespace traffic is silently dropped. Intra-namespace traffic is permitted. DNS resolution and Kubernetes API access are always preserved.
+Traffic to or from namespaces outside ns-alpha/ns-beta/ns-gamma is silently dropped. Traffic among ns-alpha/ns-beta/ns-gamma is permitted. DNS resolution and Kubernetes API access are always preserved.
 
 ---
 

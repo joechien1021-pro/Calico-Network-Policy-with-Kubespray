@@ -57,34 +57,34 @@ kubectl apply -f calico-global-default-deny.yaml
 
 ---
 
-## 3. `allow-same-namespace-only.yaml`
+## 3. `allow-only-alpha-beta-communication.yaml`
 
-**Purpose:** Restrict pods to communicating only with other pods in the **same namespace**.
+**Purpose:** Restrict pods to communicating only with other pods in `ns-alpha`, `ns-beta`, or `ns-gamma`.
 
 ```yaml
 kind: NetworkPolicy           # namespace-scoped (not cluster-wide)
-name: allow-same-namespace-only
-namespaces: ns-alpha, ns-beta
+name: allow-alpha-beta-gamma-only
+namespaces: ns-alpha, ns-beta, ns-gamma
 
 selector: all()               # applies to every pod in the namespace
 types: [Ingress, Egress]
 
-ingress: Allow from source selector all()         # any pod in this namespace
-egress:  Allow to destination selector all()      # any pod in this namespace
+ingress: Allow from source in ns-alpha/ns-beta/ns-gamma
+egress:  Allow to destination in ns-alpha/ns-beta/ns-gamma
 ```
 
-**Key detail — scope:** This uses `kind: NetworkPolicy` (namespace-scoped), not `GlobalNetworkPolicy`. It is applied independently to `ns-alpha` and `ns-beta`. Any pod outside those namespaces initiating a connection will be denied by the accompanying default-deny rule.
+**Key detail — scope:** This uses `kind: NetworkPolicy` (namespace-scoped), not `GlobalNetworkPolicy`. It is applied independently to `ns-alpha`, `ns-beta`, and `ns-gamma`, and each rule explicitly allows peers only from those three namespaces via `namespaceSelector`.
 
 **When to use:**
-- Pair with `calico-global-default-deny.yaml` to isolate namespaces from each other.
+- Pair with `calico-global-default-deny.yaml` to block all traffic outside this namespace set.
 - Use as a building block before adding finer-grained per-service rules.
 
 **Apply:**
 ```bash
-kubectl apply -f allow-same-namespace-only.yaml
+kubectl apply -f allow-only-alpha-beta-communication.yaml
 ```
 
-> Note: The `selector: all()` in the ingress/egress rules **does not** include a `namespaceSelector`, so in this standalone file any pod (even from another namespace) that passes higher-priority rules could still reach these pods. In `calico-tiered-zero-trust.yaml` this is tightened with an explicit `namespaceSelector`.
+> Note: This file currently allows traffic among ns-alpha/ns-beta/ns-gamma (not only alpha-beta). If you need alpha-beta only, remove `ns-gamma` from each `namespaceSelector` and remove the `ns-gamma` policy object.
 
 ---
 
@@ -121,17 +121,17 @@ Required for pods that call the Kubernetes API (e.g. controllers, operators, ser
 
 ---
 
-### Policy 3 — `allow-same-namespace-only` for `ns-alpha` (order: 200)
+### Policy 3 — `allow-alpha-beta-gamma-only` for `ns-alpha` (order: 200)
 
 Namespace-scoped `NetworkPolicy` on `ns-alpha`.
 
-Allows ingress/egress **only** to/from pods in `ns-alpha` (enforced via `namespaceSelector: kubernetes.io/metadata.name == 'ns-alpha'`). This is stricter than the standalone version in file #3 above because the `namespaceSelector` explicitly pins traffic to the namespace.
+Allows ingress/egress only when the peer pod is in `ns-alpha`, `ns-beta`, or `ns-gamma` (enforced via `namespaceSelector`).
 
 ---
 
-### Policy 4 — `allow-same-namespace-only` for `ns-beta` and `ns-gamma` (order: 200)
+### Policy 4 — `allow-alpha-beta-gamma-only` for `ns-beta` and `ns-gamma` (order: 200)
 
-Identical rules applied independently to `ns-beta` and `ns-gamma`. Each namespace only allows communication within itself.
+Identical rules applied independently to `ns-beta` and `ns-gamma`. Pods in these namespaces can communicate with pods in `ns-alpha`, `ns-beta`, and `ns-gamma`, but not with other namespaces.
 
 ---
 
@@ -156,7 +156,7 @@ Any pod makes a connection attempt
          │
    order 100 ──► DNS (port 53)?          → ALLOW
    order 110 ──► Kube API (port 6443)?   → ALLOW
-   order 200 ──► Same namespace peer?    → ALLOW
+      order 200 ──► Peer in ns-alpha/ns-beta/ns-gamma? → ALLOW
    order 1000 ──► Everything else        → DENY
 ```
 
