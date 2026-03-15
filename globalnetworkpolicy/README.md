@@ -81,7 +81,7 @@ egress:  Allow to destination in ns-alpha/ns-beta/ns-gamma
 
 **Apply:**
 ```bash
-kubectl apply -f allow-only-alpha-beta-communication.yaml
+kubectl apply -f allow-only-alpha-beta-gamma-communication.yaml
 ```
 
 > Note: This file currently allows traffic among ns-alpha/ns-beta/ns-gamma (not only alpha-beta). If you need alpha-beta only, remove `ns-gamma` from each `namespaceSelector` and remove the `ns-gamma` policy object.
@@ -169,3 +169,18 @@ kubectl apply -f calico-tiered-zero-trust.yaml
 ```bash
 kubectl delete -f calico-tiered-zero-trust.yaml
 ```
+
+---
+
+## Command Reference
+
+### `kubectl get networkpolicy.crd.projectcalico.org -A -o wide`
+
+Use this command to verify Calico namespace-scoped policies across the whole cluster.
+
+- `kubectl get`: Lists Kubernetes resources.
+- `networkpolicy.crd.projectcalico.org`: Targets Calico CRD `NetworkPolicy` objects (not the built-in Kubernetes NetworkPolicy API).
+- `-A`: Shows policies from all namespaces.
+- `-o wide`: Prints a wider output table with additional columns when available.
+
+This is useful for checking whether old or overlapping Calico policies are still applied.
