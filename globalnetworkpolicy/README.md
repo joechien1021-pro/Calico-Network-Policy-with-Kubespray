@@ -57,7 +57,7 @@ kubectl apply -f calico-global-default-deny.yaml
 
 ---
 
-## 3. `allow-only-alpha-beta-communication.yaml`
+## 3. `allow-only-alpha-beta-gamma-communication.yaml`
 
 **Purpose:** Restrict pods to communicating only with other pods in `ns-alpha`, `ns-beta`, or `ns-gamma`.
 
