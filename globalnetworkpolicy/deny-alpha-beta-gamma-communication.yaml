@@ -1,0 +1,70 @@
+############################################
+# NetworkPolicy to deny pod-to-pod communication across different namespaces.
+# Pods in ns-alpha, ns-beta, and ns-gamma can communicate only within the same namespace.
+############################################
+
+apiVersion: crd.projectcalico.org/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-cross-namespace
+  namespace: ns-alpha
+spec:
+  selector: all()
+  order: 210
+  types:
+    - Ingress
+    - Egress
+  ingress:
+    - action: Allow
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-alpha'
+        selector: all()
+  egress:
+    - action: Allow
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-alpha'
+        selector: all()
+---
+apiVersion: crd.projectcalico.org/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-cross-namespace
+  namespace: ns-beta
+spec:
+  selector: all()
+  order: 210
+  types:
+    - Ingress
+    - Egress
+  ingress:
+    - action: Allow
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-beta'
+        selector: all()
+  egress:
+    - action: Allow
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-beta'
+        selector: all()
+---
+apiVersion: crd.projectcalico.org/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-cross-namespace
+  namespace: ns-gamma
+spec:
+  selector: all()
+  order: 210
+  types:
+    - Ingress
+    - Egress
+  ingress:
+    - action: Allow
+      source:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-gamma'
+        selector: all()
+  egress:
+    - action: Allow
+      destination:
+        namespaceSelector: kubernetes.io/metadata.name == 'ns-gamma'
+        selector: all()

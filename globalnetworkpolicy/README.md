@@ -1,6 +1,6 @@
 # GlobalNetworkPolicy — Policy Reference
 
-This folder contains four Calico network policy YAML files. They can be applied independently or together as a tiered zero-trust stack.
+This folder contains five Calico network policy YAML files. They can be applied independently or together as a tiered zero-trust stack.
 
 ---
 
@@ -88,7 +88,31 @@ kubectl apply -f allow-only-alpha-beta-gamma-communication.yaml
 
 ---
 
-## 4. `calico-tiered-zero-trust.yaml`
+## 4. `deny-alpha-beta-gamma-communication.yaml`
+
+**Purpose:** Deny pod-to-pod communication across different namespaces for `ns-alpha`, `ns-beta`, and `ns-gamma`.
+
+This file defines one `NetworkPolicy` per namespace with:
+- `selector: all()` so all pods in each namespace are selected.
+- Allow rules scoped only to the same namespace via `namespaceSelector`.
+
+Result:
+- Intra-namespace pod-to-pod traffic is allowed.
+- Cross-namespace pod-to-pod traffic is denied by default.
+
+**Apply:**
+```bash
+kubectl apply -f deny-alpha-beta-gamma-communication.yaml
+```
+
+**Remove:**
+```bash
+kubectl delete -f deny-alpha-beta-gamma-communication.yaml
+```
+
+---
+
+## 5. `calico-tiered-zero-trust.yaml`
 
 **Purpose:** A complete, ordered zero-trust policy stack. Apply this single file to enforce DNS access, Kubernetes API access, same-namespace isolation, and a final default deny — all in priority order.
 
