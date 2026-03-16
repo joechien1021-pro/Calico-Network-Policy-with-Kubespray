@@ -178,9 +178,9 @@ egress:  Deny
 ```
 Any pod makes a connection attempt
          │
-   order 100 ──► DNS (port 53)?          → ALLOW
-   order 110 ──► Kube API (port 6443)?   → ALLOW
-      order 200 ──► Peer in ns-alpha/ns-beta/ns-gamma? → ALLOW
+   order 100 ──► DNS (port 53)          → ALLOW
+   order 110 ──► Kube API (port 6443)   → ALLOW
+   order 200 ──► Peer in ns-alpha/ns-beta/ns-gamma → ALLOW
    order 1000 ──► Everything else        → DENY
 ```
 
