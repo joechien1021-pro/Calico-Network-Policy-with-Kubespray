@@ -115,7 +115,7 @@ kubectl apply -f globalnetworkpolicy/allow-only-alpha-beta-communication.yaml
 
 ### 4. Deny Cross-Namespace Pod Communication (`deny-alpha-beta-gamma-communication.yaml`)
 
-Denies pod-to-pod communication across different namespaces for `ns-alpha`, `ns-beta`, and `ns-gamma` while keeping same-namespace pod communication allowed.
+Denies pod-to-pod communication across namespaces `ns-alpha`, `ns-beta`, and `ns-gamma`, while keeping same-namespace pod communication allowed.
 
 ```bash
 kubectl apply -f globalnetworkpolicy/deny-alpha-beta-gamma-communication.yaml
@@ -123,7 +123,7 @@ kubectl apply -f globalnetworkpolicy/deny-alpha-beta-gamma-communication.yaml
 
 ### 5. Tiered Zero-Trust Stack (`calico-tiered-zero-trust.yaml`)
 
-A complete zero-trust policy set applied in priority order:
+A complete zero-trust policy set is applied in priority order:
 
 | Order | Policy | Purpose |
 |---|---|---|
@@ -241,13 +241,11 @@ Description:
 - Shows namespace, policy name, `order`, ingress actions, and egress actions.
 - Sorts by `order` to help detect overlaps and rule precedence.
 
----
+### Use this command to verify Calico namespace-scoped policies across the whole cluster.
 
-## Command Reference
-
-### `kubectl get networkpolicy.crd.projectcalico.org -A -o wide`
-
-Use this command to verify Calico namespace-scoped policies across the whole cluster.
+```bash
+kubectl get networkpolicy.crd.projectcalico.org -A -o wide
+```
 
 - `kubectl get`: Lists Kubernetes resources.
 - `networkpolicy.crd.projectcalico.org`: Targets Calico CRD `NetworkPolicy` objects (not the built-in Kubernetes NetworkPolicy API).
@@ -256,16 +254,18 @@ Use this command to verify Calico namespace-scoped policies across the whole clu
 
 This is useful for checking whether old or overlapping Calico policies are still applied.
 
-### `kubectl get globalnetworkpolicy.crd.projectcalico.org -A -o wide`
+### Use this command to verify Calico cluster-wide global policies.
 
-Use this command to verify Calico cluster-wide global policies.
+```bash
+kubectl get globalnetworkpolicy.crd.projectcalico.org -A -o wide
+```
 
 - `kubectl get`: Lists Kubernetes resources.
 - `globalnetworkpolicy.crd.projectcalico.org`: Targets Calico CRD `GlobalNetworkPolicy` objects.
 - `-A`: Included for consistency with other get commands (GlobalNetworkPolicy is cluster-scoped, so namespace does not change results).
 - `-o wide`: Prints a wider output table with additional columns when available.
 
-This is useful for confirming that baseline global rules (for example DNS allow, kube-api allow, and default deny) are applied.
+This is useful for confirming that baseline global rules (for example, DNS allow, kube-api allow, and default deny) are applied.
 
 ---
 
