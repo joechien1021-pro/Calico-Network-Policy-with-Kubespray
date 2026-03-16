@@ -31,6 +31,7 @@ This repository provides:
 └── test/
     ├── deploy-3-pods.sh                  # Create ns-alpha/ns-beta/ns-gamma with 3 pods each
     ├── validate-calico-zero-trust.sh     # Automated zero-trust policy validation
+  ├── validate-globalnetworkpolicy.sh   # Automated test with PASS/FAIL summary table for global policy behavior
     └── remove-3-pods.sh                  # Tear down test pods and namespaces
 ```
 
@@ -112,7 +113,15 @@ Restricts selected pods to communicating only with peers in `ns-alpha`, `ns-beta
 kubectl apply -f globalnetworkpolicy/allow-only-alpha-beta-communication.yaml
 ```
 
-### 4. Tiered Zero-Trust Stack (`calico-tiered-zero-trust.yaml`)
+### 4. Deny Cross-Namespace Pod Communication (`deny-alpha-beta-gamma-communication.yaml`)
+
+Denies pod-to-pod communication across different namespaces for `ns-alpha`, `ns-beta`, and `ns-gamma` while keeping same-namespace pod communication allowed.
+
+```bash
+kubectl apply -f globalnetworkpolicy/deny-alpha-beta-gamma-communication.yaml
+```
+
+### 5. Tiered Zero-Trust Stack (`calico-tiered-zero-trust.yaml`)
 
 A complete zero-trust policy set applied in priority order:
 
@@ -151,6 +160,24 @@ Runs an end-to-end validation that:
 
 ```bash
 bash test/validate-calico-zero-trust.sh
+```
+
+### Validate global network policy with PASS/FAIL table
+
+Runs an automated test for `globalnetworkpolicy/deny-alpha-beta-gamma-communication.yaml` and prints a summary table of checks.
+
+Expected behavior:
+1. Same-namespace traffic is allowed.
+2. Cross-namespace traffic is denied.
+
+```bash
+./test/validate-globalnetworkpolicy.sh
+```
+
+Optional cleanup after tests:
+
+```bash
+CLEANUP=true ./test/validate-globalnetworkpolicy.sh
 ```
 
 Environment variable overrides:
