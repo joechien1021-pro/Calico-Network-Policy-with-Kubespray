@@ -213,6 +213,36 @@ Traffic to or from namespaces outside ns-alpha/ns-beta/ns-gamma is silently drop
 
 ---
 
+## Command Reference
+
+### Query GlobalNetworkPolicy order and allow/deny actions
+
+```bash
+kubectl get globalnetworkpolicy.crd.projectcalico.org \
+  -o custom-columns=NAME:.metadata.name,ORDER:.spec.order,INGRESS:.spec.ingress[*].action,EGRESS:.spec.egress[*].action \
+  --sort-by=.spec.order
+```
+
+Description:
+- Lists all Calico `GlobalNetworkPolicy` objects.
+- Shows policy name, `order`, ingress actions, and egress actions.
+- Sorts by `order` so evaluation priority is easy to read.
+
+### Query NetworkPolicy order and allow/deny actions (all namespaces)
+
+```bash
+kubectl get networkpolicy.crd.projectcalico.org -A \
+  -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,ORDER:.spec.order,INGRESS:.spec.ingress[*].action,EGRESS:.spec.egress[*].action \
+  --sort-by=.spec.order
+```
+
+Description:
+- Lists all Calico namespace-scoped `NetworkPolicy` objects across namespaces.
+- Shows namespace, policy name, `order`, ingress actions, and egress actions.
+- Sorts by `order` to help detect overlaps and rule precedence.
+
+---
+
 ## License
 
 MIT
