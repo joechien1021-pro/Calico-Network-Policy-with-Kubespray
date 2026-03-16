@@ -243,6 +243,32 @@ Description:
 
 ---
 
+## Command Reference
+
+### `kubectl get networkpolicy.crd.projectcalico.org -A -o wide`
+
+Use this command to verify Calico namespace-scoped policies across the whole cluster.
+
+- `kubectl get`: Lists Kubernetes resources.
+- `networkpolicy.crd.projectcalico.org`: Targets Calico CRD `NetworkPolicy` objects (not the built-in Kubernetes NetworkPolicy API).
+- `-A`: Shows policies from all namespaces.
+- `-o wide`: Prints a wider output table with additional columns when available.
+
+This is useful for checking whether old or overlapping Calico policies are still applied.
+
+### `kubectl get globalnetworkpolicy.crd.projectcalico.org -A -o wide`
+
+Use this command to verify Calico cluster-wide global policies.
+
+- `kubectl get`: Lists Kubernetes resources.
+- `globalnetworkpolicy.crd.projectcalico.org`: Targets Calico CRD `GlobalNetworkPolicy` objects.
+- `-A`: Included for consistency with other get commands (GlobalNetworkPolicy is cluster-scoped, so namespace does not change results).
+- `-o wide`: Prints a wider output table with additional columns when available.
+
+This is useful for confirming that baseline global rules (for example DNS allow, kube-api allow, and default deny) are applied.
+
+---
+
 ## License
 
 MIT
