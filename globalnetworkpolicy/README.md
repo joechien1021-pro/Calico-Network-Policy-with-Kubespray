@@ -1,6 +1,6 @@
 # GlobalNetworkPolicy — Policy Reference
 
-This folder contains five Calico network policy YAML files. They can be applied independently or together as a tiered zero-trust stack.
+This folder contains six Calico network policy YAML files. They can be applied independently or together as a tiered zero-trust stack.
 
 ---
 
@@ -192,4 +192,37 @@ kubectl apply -f calico-tiered-zero-trust.yaml
 **Remove the full stack:**
 ```bash
 kubectl delete -f calico-tiered-zero-trust.yaml
+```
+
+---
+
+## 6. `calico-tiered-zero-trust-v1.yaml`
+
+**Purpose:** Tier-based zero-trust model using Calico `Tier` + `GlobalNetworkPolicy` resources for protected namespaces.
+
+This file defines:
+- Two Calico tiers:
+      - `zt-security` (order `100`) for shared security controls.
+      - `zt-app` (order `200`) for application-level isolation.
+- Shared DNS egress allow policy in `zt-security` for protected namespaces.
+- Shared ingress allow from `traefik` to `dashboard`/`keycloak` in `zt-app`.
+- Per-namespace intra-namespace allow policies (`dashboard`, `keycloak`, `ns-alpha`, `ns-beta`, `ns-gamma`, `traefik`).
+- Final default deny (`order: 1000`) for protected namespaces only.
+
+Protected namespace set used by this v1 policy:
+`dashboard`, `keycloak`, `ns-alpha`, `ns-beta`, `ns-gamma`, `traefik`.
+
+**When to use:**
+- You want strict isolation with explicit, tiered policy precedence.
+- You need shared security controls (for example DNS) separated from app-specific rules.
+- You need ingress only from `traefik` to selected app namespaces.
+
+**Apply:**
+```bash
+kubectl apply -f calico-tiered-zero-trust-v1.yaml
+```
+
+**Remove:**
+```bash
+kubectl delete -f calico-tiered-zero-trust-v1.yaml
 ```
