@@ -1,0 +1,187 @@
+apiVersion: crd.projectcalico.org/v1
+kind: Tier
+metadata:
+  name: zt-security
+spec:
+  order: 100
+
+---
+apiVersion: crd.projectcalico.org/v1
+kind: Tier
+metadata:
+  name: zt-app
+spec:
+  order: 200
+
+# 1) Shared security allow: DNS egress for protected namespaces
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: allow-dns-egress
+spec:
+  tier: zt-security
+  order: 10
+  selector: 'projectcalico.org/namespace in {"dashboard","keycloak","ns-alpha","ns-beta","ns-gamma","traefik"}'
+  types: [Egress]
+  egress:
+    - action: Allow
+      protocol: UDP
+      destination:
+        namespaceSelector: 'kubernetes.io/metadata.name == "kube-system"'
+        ports: [53]
+    - action: Allow
+      protocol: TCP
+      destination:
+        namespaceSelector: 'kubernetes.io/metadata.name == "kube-system"'
+        ports: [53]
+
+# 2) Shared app allow: Traefik -> dashboard/keycloak
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: allow-traefik-to-dashboard-keycloak
+spec:
+  tier: zt-app
+  order: 10
+  selector: 'projectcalico.org/namespace in {"dashboard","keycloak"}'
+  types: [Ingress]
+  ingress:
+    - action: Allow
+      protocol: TCP
+      source:
+        namespaceSelector: 'kubernetes.io/metadata.name == "traefik"'
+      destination:
+        ports: [80, 443, 8080]
+
+# 3) Intra-namespace allow (repeat per protected namespace)
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: allow-intra-dashboard
+spec:
+  tier: zt-app
+  order: 20
+  selector: 'projectcalico.org/namespace == "dashboard"'
+  types: [Ingress, Egress]
+  ingress:
+    - action: Allow
+      source:
+        namespaceSelector: 'kubernetes.io/metadata.name == "dashboard"'
+  egress:
+    - action: Allow
+      destination:
+        namespaceSelector: 'kubernetes.io/metadata.name == "dashboard"'
+
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: allow-intra-keycloak
+spec:
+  tier: zt-app
+  order: 21
+  selector: 'projectcalico.org/namespace == "keycloak"'
+  types: [Ingress, Egress]
+  ingress:
+    - action: Allow
+      source:
+        namespaceSelector: 'kubernetes.io/metadata.name == "keycloak"'
+  egress:
+    - action: Allow
+      destination:
+        namespaceSelector: 'kubernetes.io/metadata.name == "keycloak"'
+
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: allow-intra-ns-alpha
+spec:
+  tier: zt-app
+  order: 22
+  selector: 'projectcalico.org/namespace == "ns-alpha"'
+  types: [Ingress, Egress]
+  ingress:
+    - action: Allow
+      source:
+        namespaceSelector: 'kubernetes.io/metadata.name == "ns-alpha"'
+  egress:
+    - action: Allow
+      destination:
+        namespaceSelector: 'kubernetes.io/metadata.name == "ns-alpha"'
+
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: allow-intra-ns-beta
+spec:
+  tier: zt-app
+  order: 23
+  selector: 'projectcalico.org/namespace == "ns-beta"'
+  types: [Ingress, Egress]
+  ingress:
+    - action: Allow
+      source:
+        namespaceSelector: 'kubernetes.io/metadata.name == "ns-beta"'
+  egress:
+    - action: Allow
+      destination:
+        namespaceSelector: 'kubernetes.io/metadata.name == "ns-beta"'
+
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: allow-intra-ns-gamma
+spec:
+  tier: zt-app
+  order: 24
+  selector: 'projectcalico.org/namespace == "ns-gamma"'
+  types: [Ingress, Egress]
+  ingress:
+    - action: Allow
+      source:
+        namespaceSelector: 'kubernetes.io/metadata.name == "ns-gamma"'
+  egress:
+    - action: Allow
+      destination:
+        namespaceSelector: 'kubernetes.io/metadata.name == "ns-gamma"'
+
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: allow-intra-traefik
+spec:
+  tier: zt-app
+  order: 25
+  selector: 'projectcalico.org/namespace == "traefik"'
+  types: [Ingress, Egress]
+  ingress:
+    - action: Allow
+      source:
+        namespaceSelector: 'kubernetes.io/metadata.name == "traefik"'
+  egress:
+    - action: Allow
+      destination:
+        namespaceSelector: 'kubernetes.io/metadata.name == "traefik"'
+
+# 4) Default deny for protected namespaces only
+---
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: default-deny-protected-namespaces
+spec:
+  tier: zt-app
+  order: 1000
+  selector: 'projectcalico.org/namespace in {"dashboard","keycloak","ns-alpha","ns-beta","ns-gamma","traefik"}'
+  types: [Ingress, Egress]
+  ingress:
+    - action: Deny
+  egress:
+    - action: Deny
