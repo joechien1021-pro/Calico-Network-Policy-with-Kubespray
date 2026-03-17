@@ -1,3 +1,14 @@
+#########################################################
+# Calico GlobalNetworkPolicy for Tiered Zero Trust model
+# This example defines two tiers: zt-security for shared security policies and zt-app for application-specific policies.
+# It includes:
+# 1) A shared security allow policy for DNS egress from protected namespaces.
+# 2) A shared app allow policy for Traefik to access dashboard and keycloak
+# 3) Intra-namespace allow policies for each protected namespace.
+# 4) A default deny policy for all protected namespaces.
+# Note: Adjust namespace names, ports, and selectors as needed for your environment.
+######################################################### 
+
 apiVersion: crd.projectcalico.org/v1
 kind: Tier
 metadata:
