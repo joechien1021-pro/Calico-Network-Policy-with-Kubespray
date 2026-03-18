@@ -1,0 +1,821 @@
+# =============================================================
+# AEGIS TIERED NETWORK POLICY — ON-PREMISES K8s CLUSTER
+# =============================================================
+# TIER 1  Security Team        order 1-199
+# TIER 2  Platform / NetOps    order 200-499
+# TIER 3  Pass to App Teams    order 500
+# TIER 4  Default Deny         order 9999
+# TIER 5  App Team (K8s native NetworkPolicy)
+# =============================================================
+
+# ╔═══════════════════════════════════════════════════════════╗
+# ║           TIER 1 — SECURITY TEAM POLICIES                ║
+# ║           order 1-199 · Absolute · No bypass             ║
+# ╚═══════════════════════════════════════════════════════════╝
+
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: sec-protect-control-plane
+  annotations:
+    owner: security-team
+    ticket: SEC-001
+    description: "Protect API server and etcd — only admin subnet and nodes"
+spec:
+  order: 10
+  selector: all()
+  ingress:
+  - action: Allow
+    protocol: TCP
+    destination:
+      ports: [6443, 2379, 2380]
+    source:
+      nets:
+      - "192.168.1.0/24"            # admin workstation subnet
+      - "10.10.0.0/16"              # node CIDR
+  - action: Deny
+    protocol: TCP
+    destination:
+      ports: [6443, 2379, 2380]
+
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: sec-ssh-lockdown
+  annotations:
+    owner: security-team
+    ticket: SEC-002
+    description: "Only jump host can SSH to any node"
+spec:
+  order: 20
+  selector: all()
+  ingress:
+  - action: Allow
+    protocol: TCP
+    source:
+      nets: ["192.168.1.10/32"]     # jump host / bastion
+    destination:
+      ports: [22]
+  - action: Deny
+    protocol: TCP
+    destination:
+      ports: [22]
+
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: sec-protect-domain-controllers
+  annotations:
+    owner: security-team
+    ticket: SEC-003
+    description: "Only auth-service pods reach AD/LDAP"
+spec:
+  order: 30
+  selector: all()
+  egress:
+  - action: Allow
+    destination:
+      nets: ["192.168.1.20/32"]     # domain controller IP
+      ports: [389, 636, 88, 445]    # LDAP, LDAPS, Kerberos, SMB
+    source:
+      selector: role == 'auth-service'
+  - action: Deny
+    destination:
+      nets: ["192.168.1.20/32"]
+
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: sec-block-bmc-ipmi
+  annotations:
+    owner: security-team
+    ticket: SEC-004
+    description: "No pod can reach BMC/IPMI/iDRAC management network"
+spec:
+  order: 40
+  selector: all()
+  egress:
+  - action: Deny
+    destination:
+      nets: ["192.168.100.0/24"]    # BMC/IPMI management VLAN
+      ports: [623, 664, 80, 443]
+
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: sec-log-denied-traffic
+  annotations:
+    owner: security-team
+    ticket: SEC-005
+    description: "Log all traffic for SIEM ingestion before deny"
+spec:
+  order: 50
+  selector: all()
+  ingress:
+  - action: Log
+  egress:
+  - action: Log
+
+
+# ╔═══════════════════════════════════════════════════════════╗
+# ║        TIER 2 — PLATFORM / NETWORK OPS POLICIES         ║
+# ║        order 200-499 · Infrastructure Guardrails         ║
+# ╚═══════════════════════════════════════════════════════════╝
+
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: platform-allow-corporate-ingress
+  annotations:
+    owner: platform-network-ops
+    ticket: PLAT-001
+    description: "Only corporate subnets can reach cluster"
+spec:
+  order: 200
+  selector: all()
+  ingress:
+  - action: Allow
+    source:
+      nets:
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "192.168.0.0/16"
+  - action: Deny
+
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: platform-internal-dns-only
+  annotations:
+    owner: platform-network-ops
+    ticket: PLAT-002
+    description: "Force all DNS through corporate DNS server only"
+spec:
+  order: 210
+  selector: all()
+  egress:
+  - action: Allow
+    protocol: UDP
+    destination:
+      nets: ["192.168.1.53/32"]     # corporate DNS
+      ports: [53]
+  - action: Allow
+    protocol: TCP
+    destination:
+      nets: ["192.168.1.53/32"]
+      ports: [53]
+  - action: Deny
+    protocol: UDP
+    destination:
+      ports: [53]
+  - action: Deny
+    protocol: TCP
+    destination:
+      ports: [53]
+
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: platform-force-proxy-egress
+  annotations:
+    owner: platform-network-ops
+    ticket: PLAT-003
+    description: "All internet egress must go through corporate proxy"
+spec:
+  order: 220
+  selector: all()
+  egress:
+  - action: Allow
+    destination:
+      nets: ["10.0.0.0/8"]         # internal — bypass proxy
+  - action: Allow
+    destination:
+      nets: ["192.168.0.0/16"]     # on-prem subnets
+  - action: Allow
+    destination:
+      nets: ["192.168.1.100/32"]   # corporate proxy
+      ports: [3128, 8080]
+  - action: Deny                   # block direct internet
+
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: platform-protect-storage
+  annotations:
+    owner: platform-network-ops
+    ticket: PLAT-004
+    description: "Only storage-consumer labeled pods reach NFS/iSCSI/Ceph"
+spec:
+  order: 230
+  selector: all()
+  egress:
+  - action: Allow
+    destination:
+      nets: ["192.168.100.0/24"]   # storage VLAN
+      ports: [2049, 3260, 6789]    # NFS, iSCSI, Ceph
+    source:
+      selector: role == 'storage-consumer'
+  - action: Deny
+    destination:
+      nets: ["192.168.100.0/24"]
+
+# ─────────────────────────────────────────────────────────────
+# PLATFORM SERVICES — Per-Namespace GlobalNetworkPolicy
+# ─────────────────────────────────────────────────────────────
+
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: platform-kube-system
+  annotations:
+    owner: platform-network-ops
+    ticket: PLAT-010
+    description: "kube-system free flow — DNS, CNI, metrics-server"
+spec:
+  order: 300
+  selector: projectcalico.org/namespace == 'kube-system'
+  ingress:
+  - action: Allow
+    source:
+      nets: ["10.0.0.0/8", "192.168.0.0/16"]
+  - action: Allow
+    source:
+      namespaceSelector: all()     # all pods reach kube-dns
+    destination:
+      ports: [53, 9153]            # CoreDNS
+  egress:
+  - action: Allow                  # kube-system needs full egress
+
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: platform-ingress-nginx
+  annotations:
+    owner: platform-network-ops
+    ticket: PLAT-011
+    description: "ingress-nginx accepts HTTP/HTTPS from corporate LAN only"
+spec:
+  order: 310
+  selector: projectcalico.org/namespace == 'ingress-nginx'
+  ingress:
+  - action: Allow
+    protocol: TCP
+    destination:
+      ports: [80, 443]
+    source:
+      nets:
+      - "10.0.0.0/8"
+      - "192.168.0.0/16"
+  - action: Allow                  # health checks from nodes
+    protocol: TCP
+    destination:
+      ports: [10254]               # nginx metrics/healthz
+    source:
+      nets: ["10.10.0.0/16"]
+  - action: Deny
+    protocol: TCP
+    destination:
+      ports: [80, 443]
+  egress:
+  - action: Allow                  # nginx proxies to all app namespaces
+    destination:
+      namespaceSelector: >
+        kubernetes.io/metadata.name == 'historian' ||
+        kubernetes.io/metadata.name == 'insight'   ||
+        kubernetes.io/metadata.name == 'gpu-operator' ||
+        kubernetes.io/metadata.name == 'keycloak'  ||
+        kubernetes.io/metadata.name == 'dashboard' ||
+        kubernetes.io/metadata.name == 'headlamp'
+
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: platform-keycloak
+  annotations:
+    owner: platform-network-ops
+    ticket: PLAT-012
+    description: "Keycloak reachable from ingress-nginx and internal app namespaces"
+spec:
+  order: 320
+  selector: projectcalico.org/namespace == 'keycloak'
+  ingress:
+  - action: Allow
+    protocol: TCP
+    destination:
+      ports: [8080, 8443]
+    source:
+      namespaceSelector: >
+        kubernetes.io/metadata.name == 'ingress-nginx' ||
+        kubernetes.io/metadata.name == 'historian'     ||
+        kubernetes.io/metadata.name == 'insight'       ||
+        kubernetes.io/metadata.name == 'dashboard'     ||
+        kubernetes.io/metadata.name == 'headlamp'
+  - action: Allow                  # Keycloak cluster member discovery
+    protocol: TCP
+    destination:
+      ports: [7600, 57600]         # JGroups cluster ports
+    source:
+      namespaceSelector: kubernetes.io/metadata.name == 'keycloak'
+  - action: Deny
+    protocol: TCP
+    destination:
+      ports: [8080, 8443]
+  egress:
+  - action: Allow
+    destination:
+      nets: ["192.168.1.20/32"]    # AD/LDAP (via SEC-003 allow)
+      ports: [389, 636]
+  - action: Allow
+    destination:
+      nets: ["192.168.1.53/32"]    # DNS
+      ports: [53]
+  - action: Allow                  # DB backend for Keycloak
+    protocol: TCP
+    destination:
+      ports: [5432, 3306]          # PostgreSQL / MySQL
+      namespaceSelector: kubernetes.io/metadata.name == 'keycloak'
+
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: platform-dashboard
+  annotations:
+    owner: platform-network-ops
+    ticket: PLAT-013
+    description: "K8s Dashboard — admin subnet and ingress-nginx only"
+spec:
+  order: 330
+  selector: projectcalico.org/namespace == 'dashboard'
+  ingress:
+  - action: Allow
+    protocol: TCP
+    destination:
+      ports: [443, 8443, 9090]
+    source:
+      namespaceSelector: kubernetes.io/metadata.name == 'ingress-nginx'
+  - action: Allow
+    protocol: TCP
+    destination:
+      ports: [443, 8443]
+    source:
+      nets: ["192.168.1.0/24"]     # admin workstation subnet only
+  - action: Deny
+    protocol: TCP
+    destination:
+      ports: [443, 8443, 9090]
+  egress:
+  - action: Allow
+    destination:
+      ports: [6443]                # API server
+      nets: ["10.10.0.0/16"]
+  - action: Allow
+    destination:
+      namespaceSelector: kubernetes.io/metadata.name == 'keycloak'
+      ports: [8080, 8443]          # OIDC auth
+
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: platform-headlamp
+  annotations:
+    owner: platform-network-ops
+    ticket: PLAT-014
+    description: "Headlamp UI — admin subnet and ingress-nginx only"
+spec:
+  order: 340
+  selector: projectcalico.org/namespace == 'headlamp'
+  ingress:
+  - action: Allow
+    protocol: TCP
+    destination:
+      ports: [4466, 80, 443]
+    source:
+      namespaceSelector: kubernetes.io/metadata.name == 'ingress-nginx'
+  - action: Allow
+    protocol: TCP
+    destination:
+      ports: [4466, 80, 443]
+    source:
+      nets: ["192.168.1.0/24"]     # admin workstation subnet only
+  - action: Deny
+    protocol: TCP
+    destination:
+      ports: [4466, 80, 443]
+  egress:
+  - action: Allow
+    destination:
+      ports: [6443]                # API server
+      nets: ["10.10.0.0/16"]
+  - action: Allow
+    destination:
+      namespaceSelector: kubernetes.io/metadata.name == 'keycloak'
+      ports: [8080, 8443]          # OIDC auth
+
+# ─────────────────────────────────────────────────────────────
+# APPLICATION NAMESPACES — Platform baseline then Pass
+# historian · insight · gpu-operator
+# ─────────────────────────────────────────────────────────────
+
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: platform-app-namespaces-baseline
+  annotations:
+    owner: platform-network-ops
+    ticket: PLAT-020
+    description: "Baseline guardrails for all app namespaces before handing to app teams"
+spec:
+  order: 400
+  selector: >
+    projectcalico.org/namespace == 'historian' ||
+    projectcalico.org/namespace == 'insight'   ||
+    projectcalico.org/namespace == 'gpu-operator'
+  ingress:
+  - action: Allow                  # allow from ingress-nginx
+    source:
+      namespaceSelector: kubernetes.io/metadata.name == 'ingress-nginx'
+  - action: Allow                  # allow monitoring to scrape
+    source:
+      namespaceSelector: >
+        kubernetes.io/metadata.name == 'monitoring' ||
+        kubernetes.io/metadata.name == 'logging'
+  - action: Allow                  # allow keycloak OIDC callbacks
+    source:
+      namespaceSelector: kubernetes.io/metadata.name == 'keycloak'
+  egress:
+  - action: Allow                  # reach keycloak for auth
+    destination:
+      namespaceSelector: kubernetes.io/metadata.name == 'keycloak'
+      ports: [8080, 8443]
+  - action: Allow                  # reach kube-dns
+    destination:
+      namespaceSelector: kubernetes.io/metadata.name == 'kube-system'
+      ports: [53]
+
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: platform-pass-to-app-teams
+  annotations:
+    owner: platform-network-ops
+    ticket: PLAT-099
+    description: "Hand remaining decisions to K8s native NetworkPolicy for app teams"
+spec:
+  order: 500
+  selector: >
+    projectcalico.org/namespace == 'historian' ||
+    projectcalico.org/namespace == 'insight'   ||
+    projectcalico.org/namespace == 'gpu-operator'
+  ingress:
+  - action: Pass                   # defer to K8s NetworkPolicy below
+  egress:
+  - action: Pass
+
+
+# ╔═══════════════════════════════════════════════════════════╗
+# ║              TIER 4 — DEFAULT CATCH-ALL DENY             ║
+# ╚═══════════════════════════════════════════════════════════╝
+
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: default-deny-all
+  annotations:
+    owner: security-team
+    ticket: SEC-999
+    description: "Deny everything not explicitly allowed above"
+spec:
+  order: 9999
+  selector: all()
+  types:
+  - Ingress
+  - Egress
+
+
+# ╔═══════════════════════════════════════════════════════════╗
+# ║     TIER 5 — APPLICATION TEAM (K8s Native NetworkPolicy) ║
+# ║     Namespace scoped · App team owned                    ║
+# ╚═══════════════════════════════════════════════════════════╝
+
+# ─────────────────────────────────────────────────────────────
+# NAMESPACE: historian
+# ─────────────────────────────────────────────────────────────
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: historian-default-deny
+  namespace: historian
+  annotations:
+    owner: app-team-historian
+    ticket: APP-001
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: historian-allow-internal
+  namespace: historian
+  annotations:
+    owner: app-team-historian
+    ticket: APP-002
+    description: "historian pods communicate internally"
+spec:
+  podSelector: {}
+  ingress:
+  - from:
+    - podSelector: {}              # all pods within historian namespace
+  egress:
+  - to:
+    - podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: historian-allow-insight
+  namespace: historian
+  annotations:
+    owner: app-team-historian
+    ticket: APP-003
+    description: "insight namespace can query historian data"
+spec:
+  podSelector:
+    matchLabels:
+      app: historian-api
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: insight
+      podSelector:
+        matchLabels:
+          role: data-consumer
+  policyTypes:
+  - Ingress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: historian-allow-dns-egress
+  namespace: historian
+  annotations:
+    owner: app-team-historian
+    ticket: APP-004
+spec:
+  podSelector: {}
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  policyTypes:
+  - Egress
+
+# ─────────────────────────────────────────────────────────────
+# NAMESPACE: insight
+# ─────────────────────────────────────────────────────────────
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: insight-default-deny
+  namespace: insight
+  annotations:
+    owner: app-team-insight
+    ticket: APP-010
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: insight-allow-internal
+  namespace: insight
+  annotations:
+    owner: app-team-insight
+    ticket: APP-011
+    description: "insight pods communicate internally"
+spec:
+  podSelector: {}
+  ingress:
+  - from:
+    - podSelector: {}
+  egress:
+  - to:
+    - podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: insight-allow-historian
+  namespace: insight
+  annotations:
+    owner: app-team-insight
+    ticket: APP-012
+    description: "insight data-consumer pods can reach historian API"
+spec:
+  podSelector:
+    matchLabels:
+      role: data-consumer
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: historian
+      podSelector:
+        matchLabels:
+          app: historian-api
+  policyTypes:
+  - Egress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: insight-allow-dns-egress
+  namespace: insight
+  annotations:
+    owner: app-team-insight
+    ticket: APP-013
+spec:
+  podSelector: {}
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  policyTypes:
+  - Egress
+
+# ─────────────────────────────────────────────────────────────
+# NAMESPACE: gpu-operator
+# ─────────────────────────────────────────────────────────────
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gpu-operator-default-deny
+  namespace: gpu-operator
+  annotations:
+    owner: app-team-gpu
+    ticket: APP-020
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gpu-operator-allow-internal
+  namespace: gpu-operator
+  annotations:
+    owner: app-team-gpu
+    ticket: APP-021
+    description: "gpu-operator components communicate internally"
+spec:
+  podSelector: {}
+  ingress:
+  - from:
+    - podSelector: {}
+  egress:
+  - to:
+    - podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gpu-operator-allow-kube-system
+  namespace: gpu-operator
+  annotations:
+    owner: app-team-gpu
+    ticket: APP-022
+    description: "gpu-operator needs kube-system for device plugins and DNS"
+spec:
+  podSelector: {}
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: TCP
+      port: 6443                   # API server
+    - protocol: UDP
+      port: 53                     # DNS
+    - protocol: TCP
+      port: 53
+  policyTypes:
+  - Egress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gpu-operator-allow-insight
+  namespace: gpu-operator
+  annotations:
+    owner: app-team-gpu
+    ticket: APP-023
+    description: "insight namespace can submit GPU workloads"
+spec:
+  podSelector:
+    matchLabels:
+      app: gpu-operator
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: insight
+      podSelector:
+        matchLabels:
+          role: gpu-consumer
+  policyTypes:
+  - Ingress
+```
+
+---
+
+### Architecture Summary
+```
+TIER 1 · Security (order 1-199)
+  sec-protect-control-plane     → API server + etcd lockdown
+  sec-ssh-lockdown              → jump host only
+  sec-protect-domain-controllers→ AD/LDAP restricted
+  sec-block-bmc-ipmi            → management network blocked
+  sec-log-denied-traffic        → SIEM feed
+
+TIER 2 · Platform (order 200-499)
+  platform-allow-corporate-ingress   → LAN only
+  platform-internal-dns-only         → corp DNS enforced
+  platform-force-proxy-egress        → no direct internet
+  platform-protect-storage           → storage VLAN locked
+  platform-kube-system               → system namespace
+  platform-ingress-nginx             → HTTP/S from LAN only
+  platform-keycloak                  → auth from approved NS
+  platform-dashboard                 → admin subnet only
+  platform-headlamp                  → admin subnet only
+  platform-app-namespaces-baseline   → ingress + monitoring
+  platform-pass-to-app-teams         → Pass → K8s NP
+
+TIER 4 · Catch-All (order 9999)
+  default-deny-all              → deny everything else
+
+TIER 5 · App Teams (K8s NetworkPolicy)
+  historian  → internal + insight query
+  insight    → internal + historian egress + gpu submit
+  gpu-operator → internal + kube-system + insight consumers
