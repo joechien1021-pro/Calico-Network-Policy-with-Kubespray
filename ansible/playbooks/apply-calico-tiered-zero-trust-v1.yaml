@@ -1,0 +1,33 @@
+---
+- name: Apply Calico tiered zero-trust v1 policy
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  vars:
+    policy_file: "{{ playbook_dir }}/../../globalnetworkpolicy/calico-tiered-zero-trust-v1.yaml"
+
+  tasks:
+    - name: Check policy file exists
+      ansible.builtin.stat:
+        path: "{{ policy_file }}"
+      register: policy_stat
+
+    - name: Fail if policy file is missing
+      ansible.builtin.fail:
+        msg: "Policy file not found: {{ policy_file }}"
+      when: not policy_stat.stat.exists
+
+    - name: Apply Calico tiered zero-trust v1 policy
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - apply
+          - -f
+          - "{{ policy_file }}"
+      register: apply_result
+      changed_when: "'created' in apply_result.stdout or 'configured' in apply_result.stdout"
+
+    - name: Show kubectl apply output
+      ansible.builtin.debug:
+        var: apply_result.stdout_lines

@@ -136,7 +136,7 @@ kind: GlobalNetworkPolicy
 metadata:
   name: global-default-deny
 spec:
-  order: 100000
+  order: 1000
   selector: all()
   types:
     - Ingress
