@@ -118,7 +118,7 @@ metadata:
   name: default.global-default-deny
 spec:
   tier: default
-  order: 2000 
+  order: 10000
   selector: all()
   namespaceSelector: "kubernetes.io/metadata.name not in {'kube-system', 'calico-system'}"
   types:
