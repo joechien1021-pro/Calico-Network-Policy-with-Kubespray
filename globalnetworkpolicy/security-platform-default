@@ -1,0 +1,128 @@
+# ==========================================
+# 1. TIER DEFINITIONS
+# ==========================================
+apiVersion: projectcalico.org/v3
+kind: Tier
+metadata:
+  name: security
+spec:
+  order: 100
+---
+apiVersion: projectcalico.org/v3
+kind: Tier
+metadata:
+  name: platform
+spec:
+  order: 500
+---
+# K8s Native NetworkPolicies ALWAYS live in the 'default' tier.
+# We set the order to 1000 to ensure they follow Platform rules.
+apiVersion: projectcalico.org/v3
+kind: Tier
+metadata:
+  name: default
+spec:
+  order: 1000
+---
+# ==========================================
+# 2. SECURITY TIER (GLOBAL GUARDRAILS)
+# ==========================================
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: security.on-prem-guardrails
+spec:
+  tier: security
+  order: 10
+  selector: all()
+  namespaceSelector: "kubernetes.io/metadata.name not in {'kube-system', 'calico-system'}"
+  ingress:
+    - action: Deny
+      protocol: TCP
+      destination:
+        ports: [10250, 10255, 2379, 2380] # Protect Control Plane
+  egress:
+    - action: Deny
+      protocol: TCP
+      destination:
+        ports: [21, 22, 23] # Block SSH/FTP/Telnet
+    - action: Deny
+      destination:
+        nets: [10.0.100.0/24] # REPLACE: Your On-Prem Mgmt/IPMI Subnet
+---
+# ==========================================
+# 3. PLATFORM TIER (INFRA & PASS)
+# ==========================================
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: platform.allow-system-all
+spec:
+  tier: platform
+  order: 10
+  selector: all()
+  namespaceSelector: "kubernetes.io/metadata.name in {'kube-system', 'calico-system'}"
+  ingress: [{action: Allow}]
+  egress: [{action: Allow}]
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: platform.core-infra-delegate
+spec:
+  tier: platform
+  order: 100
+  selector: all()
+  namespaceSelector: "kubernetes.io/metadata.name not in {'kube-system', 'calico-system'}"
+  egress:
+    - action: Allow
+      protocol: UDP
+      destination:
+        selector: k8s-app == "kube-dns"
+        namespaceSelector: kubernetes.io/metadata.name == "kube-system"
+        ports: [53]
+    - action: Pass # HANDS OFF TO THE K8S NATIVE POLICIES (Order 1000)
+  ingress:
+    - action: Pass # HANDS OFF TO THE K8S NATIVE POLICIES (Order 1000)
+---
+# ==========================================
+# 4. APPLICATION TIER (K8S NATIVE EXAMPLE)
+# ==========================================
+# Note: This is what the APP TEAM applies. 
+# It automatically lands in the 'default' tier.
+# ------------------------------------------
+# apiVersion: networking.k8s.io/v1
+# kind: NetworkPolicy
+# metadata:
+#   name: app-allow-frontend
+#   namespace: production-app
+# spec:
+#   podSelector:
+#     matchLabels:
+#       role: backend
+#   ingress:
+#   - from:
+#     - podSelector:
+#         matchLabels:
+#           role: frontend
+---
+# ==========================================
+# 5. GOVERNANCE TIER (FINAL CATCH-ALL)
+# ==========================================
+# This policy lives in the 'default' tier but uses 
+# a high order (2000) to ensure it acts as the 
+# absolute last rule after all App Team policies.
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: default.global-default-deny
+spec:
+  tier: default
+  order: 2000 
+  selector: all()
+  namespaceSelector: "kubernetes.io/metadata.name not in {'kube-system', 'calico-system'}"
+  types:
+  - Ingress
+  - Egress
+  ingress: [{action: Deny}]
+  egress: [{action: Deny}]
